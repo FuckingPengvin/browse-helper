@@ -1,0 +1,31 @@
+model:
+  name: "glm4"
+  provider: "ollama"
+  endpoint: "http://localhost:11435"
+  temperature: 0.1
+  top_p: 0.9
+  max_tokens: 2000
+
+cache:
+  enabled: true
+  redis_url: "redis://localhost:6379"
+  default_ttl: 3600  # 1 час по умолчанию
+  plan_cache_ttl: 86400  # 24 часа для планов
+  step_cache_ttl: 43200  # 12 часов для шагов
+
+optimization:
+  compress_context: true
+  max_tokens_per_request: 1500
+  deduplicate_requests: true
+
+browser:
+  headless: false
+  slow_mo: 800
+  viewport:
+    width: 1280
+    height: 720
+
+tasks:
+  max_retries: 3
+  timeout: 300
+  human_intervention_threshold: 0.8
