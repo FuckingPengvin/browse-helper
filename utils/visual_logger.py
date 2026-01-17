@@ -1,0 +1,2 @@
+class VisualLogger:
+    pass
