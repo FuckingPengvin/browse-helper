@@ -6,9 +6,10 @@ import os
 
 @dataclass
 class BrowserConfig:
-    type: str = "chromium"
+    type: str = "chromium"  # chromium, firefox, webkit
     headless: bool = False
-    viewport: Dict[str, int] = field(default_factory=lambda: {"width": 1280, "height": 720})
+    viewport_width: int = 1280
+    viewport_height: int = 720
     timeout: int = 30000
     user_agent: Optional[str] = None
     proxy: Optional[str] = None
@@ -52,12 +53,23 @@ class LoggingConfig:
 
 
 @dataclass
+class TokenConfig:
+    token_budget: Dict[str, Any] = field(default_factory=lambda: {
+        "daily_limit": 100000,
+        "hourly_limit": 20000,
+        "per_request_limit": 4000,
+        "reset_time": "00:00"
+    })
+
+
+@dataclass
 class Config:
     browser: BrowserConfig
     ollama: OllamaConfig
     agent: AgentConfig
     coordinator: CoordinatorConfig
     logging: LoggingConfig
+    tokens: TokenConfig
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Config':
@@ -66,7 +78,8 @@ class Config:
             ollama=OllamaConfig(**data.get('ollama', {})),
             agent=AgentConfig(**data.get('agent', {})),
             coordinator=CoordinatorConfig(**data.get('coordinator', {})),
-            logging=LoggingConfig(**data.get('logging', {}))
+            logging=LoggingConfig(**data.get('logging', {})),
+            tokens=TokenConfig(**data.get('tokens', {}))
         )
 
 
@@ -78,23 +91,11 @@ def load_config(config_path: str = "config.yaml") -> Config:
             ollama=OllamaConfig(),
             agent=AgentConfig(),
             coordinator=CoordinatorConfig(),
-            logging=LoggingConfig()
+            logging=LoggingConfig(),
+            tokens=TokenConfig()
         )
 
     with open(config_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
 
     return Config.from_dict(data)
-
-
-def save_config(config: Config, config_path: str = "config.yaml"):
-    data = {
-        'browser': vars(config.browser),
-        'ollama': vars(config.ollama),
-        'agent': vars(config.agent),
-        'coordinator': vars(config.coordinator),
-        'logging': vars(config.logging)
-    }
-
-    with open(config_path, 'w', encoding='utf-8') as f:
-        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)

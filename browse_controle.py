@@ -2,7 +2,6 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Literal
 from dataclasses import dataclass, field
-from enum import Enum
 import logging
 
 try:
@@ -23,16 +22,9 @@ except ImportError:
     class ElementHandle:
         pass
 
-
-class BrowserType(Enum):
-    CHROMIUM = "chromium"
-    FIREFOX = "firefox"
-    WEBKIT = "webkit"
-
-
 @dataclass
 class BrowserConfig:
-    browser_type: BrowserType = BrowserType.CHROMIUM
+    type: str = field(default="chromium")
     headless: bool = False
     viewport_width: int = 1280
     viewport_height: int = 720
@@ -96,7 +88,7 @@ class BrowserController:
         try:
             self.playwright = await playwright.async_api.async_playwright().start()
 
-            browser_launcher = getattr(self.playwright, self.config.browser_type.value)
+            browser_launcher = getattr(self.playwright, self.config.type)
 
             launch_args = {
                 "headless": self.config.headless,
@@ -145,7 +137,7 @@ class BrowserController:
             self.is_initialized = True
             self.is_active = True
 
-            self.logger.info(f"Браузер инициализирован: {self.config.browser_type.value}")
+            self.logger.info(f"Браузер инициализирован: {self.config.type}")
             return True
 
         except Exception as e:
@@ -667,23 +659,24 @@ class BrowserController:
 
 def create_browser_config(
         headless: bool = True,
-        browser_type: str = "chromium",
+        type: str = "chromium",
         viewport_size: Tuple[int, int] = (1280, 720),
         proxy: Optional[str] = None,
         user_agent: Optional[str] = None
 ) -> Dict[str, Any]:
 
-    user_agents = {
-        "chrome": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "firefox": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-        "safari": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
-    }
+    user_agents = dict(
+        chrome="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 "
+               "Safari/537.36",
+        firefox="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        safari="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 "
+               "Safari/605.1.15")
 
     if not user_agent:
-        user_agent = user_agents.get(browser_type, user_agents["chrome"])
+        user_agent = user_agents.get(type, user_agents["chrome"])
 
     return {
-        "browser_type": BrowserType(browser_type),
+        "type": str(type),
         "headless": headless,
         "viewport_width": viewport_size[0],
         "viewport_height": viewport_size[1],

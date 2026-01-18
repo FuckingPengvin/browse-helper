@@ -229,17 +229,30 @@ class AgentCore:
         }
 
         try:
+            if not self.http_session:
+                self.http_session = aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=30)
+                )
+
+            self.logger.debug(f"Вызов LLM: {self.config.get('model')}, токены: {self.config.get('max_tokens')}")
+
             async with self.http_session.post(
                     f"{self.config.get('base_url', 'http://localhost:11434')}/api/generate",
                     json=payload
             ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    self.logger.error(f"Ошибка LLM API: {response.status} - {error_text}")
+                    return {"error": f"API error: {response.status}"}
+
                 result = await response.json()
 
                 tokens_used = result.get('eval_count', 0)
-                self.token_manager.add_usage(tokens_used)
+                self.token_manager.add_usage(tokens_used, 0, self.config.get('model', 'glm4'), "planning")
                 self.state.total_tokens_used += tokens_used
 
                 response_text = result.get('response', '')
+                self.logger.debug(f"LLM ответ получен: {len(response_text)} символов")
 
                 try:
                     json_start = response_text.find('{')
@@ -247,16 +260,26 @@ class AgentCore:
 
                     if json_start != -1 and json_end != 0:
                         json_str = response_text[json_start:json_end]
-                        return json.loads(json_str)
+                        parsed = json.loads(json_str)
+                        self.logger.debug("JSON успешно распарсен")
+                        return parsed
                     else:
+                        self.logger.warning("LLM не вернул JSON, возвращаю текст")
                         return {"text": response_text.strip()}
 
-                except json.JSONDecodeError:
-                    self.logger.warning(f"Не удалось распарсить JSON: {response_text[:100]}...")
+                except json.JSONDecodeError as e:
+                    self.logger.warning(f"Не удалось распарсить JSON: {e}")
+                    self.logger.debug(f"Ответ LLM: {response_text[:200]}...")
                     return {"error": "invalid_json", "raw_response": response_text}
+
+        except asyncio.TimeoutError:
+            self.logger.error("Таймаут при вызове LLM")
+            return {"error": "timeout"}
 
         except Exception as e:
             self.logger.error(f"Ошибка при вызове LLM: {e}")
+            import traceback
+            self.logger.error(f"Трассировка LLM: {traceback.format_exc()}")
             return {"error": str(e)}
 
     async def analyze_and_plan(self, task: str) -> Optional[Plan]:

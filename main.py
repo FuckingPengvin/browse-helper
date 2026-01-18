@@ -1,39 +1,68 @@
 import asyncio
 import signal
 import sys
-
+from typing import Dict, Any
 
 from agent_core import AgentCore
 from action_coordinator import ActionCoordinator
-from browse_controle import BrowserController
+from browse_controle import BrowserController, create_browser_config
 from config_loader import Config, load_config
 from utils.visual_logger import VisualLogger
 from utils.token_saver import TokenManager
 
 
 class BrowserBot:
+
     def __init__(self, config_path: str = "config.yaml"):
         self.config: Config = load_config(config_path)
         self.is_running = False
         self.task_queue = asyncio.Queue()
 
-        self.logger = VisualLogger(self.config.logging)
-        self.token_manager = TokenManager(self.config.ollama)
-        self.browser = BrowserController(self.config.browser)
+        self.logger = VisualLogger(self._dataclass_to_dict(self.config.logging))
+        self.token_manager = TokenManager(self._dataclass_to_dict(self.config.tokens))
+        self.browser = BrowserController(self._dataclass_to_dict(self.config.browser))
+
         self.coordinator = ActionCoordinator(
             browser=self.browser,
             logger=self.logger,
-            config=self.config.coordinator
+            config=self._dataclass_to_dict(self.config.coordinator)
         )
+
         self.agent = AgentCore(
             coordinator=self.coordinator,
             token_manager=self.token_manager,
             logger=self.logger,
-            config=self.config.agent
+            config=self._dataclass_to_dict(self.config.agent)
         )
 
         signal.signal(signal.SIGINT, self._handle_shutdown)
         signal.signal(signal.SIGTERM, self._handle_shutdown)
+
+    def _dataclass_to_dict(self, dataclass_obj) -> Dict[str, Any]:
+        """Преобразование dataclass в словарь"""
+        if hasattr(dataclass_obj, '__dict__'):
+            return dataclass_obj.__dict__.copy()
+        elif hasattr(dataclass_obj, '_asdict'):
+            return dataclass_obj._asdict()
+        else:
+            return dict(dataclass_obj)
+
+    def _prepare_browser_config(self) -> dict:
+        browser_config_dict = self.config.browser.__dict__.copy()
+
+        if hasattr(browser_config_dict.get('browser_type'), 'value'):
+            browser_config_dict['browser_type'] = browser_config_dict['browser_type'].value
+
+        return create_browser_config(
+            headless=browser_config_dict.get('headless', False),
+            browser_type=browser_config_dict.get('browser_type', 'chromium'),
+            viewport_size=(
+                browser_config_dict.get('viewport_width', 1280),
+                browser_config_dict.get('viewport_height', 720)
+            ),
+            proxy=browser_config_dict.get('proxy'),
+            user_agent=browser_config_dict.get('user_agent')
+        )
 
     def _handle_shutdown(self, signum, frame):
         print(f"\nПолучен сигнал {signum}, завершаю работу...")
@@ -70,7 +99,7 @@ class BrowserBot:
             evaluation = await self.agent.evaluate_result(result)
 
             self.logger.info(f"Задача завершена. Оценка: {evaluation}")
-            return result.success
+            return result.get('success', False)
 
         except Exception as e:
             self.logger.error(f"Ошибка выполнения задачи: {e}")
@@ -104,8 +133,8 @@ class BrowserBot:
                     await self._show_status()
 
                 elif user_input.lower() == '/screenshot':
-                    await self.browser.take_screenshot("manual_screenshot")
-                    self.logger.info("Скриншот сохранен")
+                    path = await self.browser.take_screenshot("manual_screenshot")
+                    self.logger.info(f"Скриншот сохранен: {path}")
 
                 elif user_input.startswith('/url '):
                     url = user_input[5:].strip()
@@ -148,13 +177,17 @@ class BrowserBot:
             self.logger.error(f"Файл не найден: {tasks_file}")
 
     async def _show_status(self):
+        browser_stats = await self.browser.get_statistics_async()
+        coordinator_stats = self.coordinator.get_statistics()
+        token_stats = self.token_manager.get_statistics()
+
         status = {
             "Браузер": "Активен" if self.browser.is_active else "Неактивен",
             "Агент": "Готов" if self.agent.is_ready else "Не готов",
             "Координатор": "Готов" if self.coordinator.is_ready else "Не готов",
-            "Токены использовано": self.token_manager.used_tokens,
-            "Текущая страница": await self.browser.get_current_url(),
-            "Активных действий": self.coordinator.active_actions_count
+            "Токены использовано": token_stats.get('total_tokens_used', 0),
+            "Текущая страница": browser_stats.get('current_url', ''),
+            "Активных действий": coordinator_stats.get('active_actions_count', 0)
         }
 
         print("\n" + "=" * 50)
@@ -168,12 +201,14 @@ class BrowserBot:
         self.logger.info("Завершение работы...")
         self.is_running = False
 
-        # Завершение в обратном порядке инициализации
         if hasattr(self, 'coordinator'):
             await self.coordinator.shutdown()
 
         if hasattr(self, 'agent'):
             await self.agent.shutdown()
+
+        if hasattr(self, 'token_manager'):
+            await self.token_manager.shutdown()
 
         if hasattr(self, 'browser'):
             await self.browser.close()

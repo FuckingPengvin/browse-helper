@@ -1,10 +1,9 @@
 browser:
   type: "chromium"
   headless: false
-  viewport:
-    width: 1280
-    height: 720
-  timeout: 30000
+  viewport_width: 1280
+  viewport_height: 720
+  timeout: 60000
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
   downloads_path: "./downloads"
 
@@ -27,14 +26,21 @@ agent:
 
 coordinator:
   max_parallel_actions: 2
-  action_timeout: 45000
+  action_timeout: 110000
   retry_attempts: 3
-  retry_delay: 1.5
+  retry_delay: 2.0
   enable_caching: true
 
 logging:
-  level: "INFO"
+  level: "DEBUG"
   screenshot_on_error: true
   save_html: true
   log_dir: "./logs"
   max_log_files: 20
+
+tokens:
+  token_budget:
+    daily_limit: 100000
+    hourly_limit: 20000
+    per_request_limit: 4000
+    reset_time: "00:00"
